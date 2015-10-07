@@ -1,0 +1,6 @@
+*.pyc
+*.so
+*.npy
+*.log
+*.out
+*.egg-info
