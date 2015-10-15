@@ -2,13 +2,17 @@ import numpy as np
 import scipy.sparse
 
 # from pynewton.fast_safe.fast_safe import primal_dual_solve
-from objective import F, DF
+# from objective import F, DF
+# from objective import DF
+from objective_fast import F, DF
 
 __all__ = ['solve_mle_rev',]
 
 from linsolve import mydot
-from linsolve import factor_schur as factor
-from linsolve import solve_factorized_schur as solve_factorized
+from linsolve import factor_aug as factor
+from linsolve import solve_factorized_aug as solve_factorized
+# from linsolve import factor_full as factor
+# from linsolve import solve_full as solve_factorized
 
 """Algorithm parameters"""
 GAMMA_MIN = 0.0001
@@ -32,7 +36,7 @@ def wrap_function(function, args):
     return ncalls, function_wrapper
 
 def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
-                      maxiter=100, show_progress=True):
+                      maxiter=100, show_progress=True, full_output=False):
     """Wrap calls to function and Jacobian"""
     fcalls, func = wrap_function(func, args)
     Dfcalls, Dfunc = wrap_function(Dfunc, args)
@@ -206,7 +210,12 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
     mu = mu0
     Dfunc_val = Dfunc(x)
     # LU = factor_kkt_schur(z, Dfunc_val, G, A)
-    LU = factor(z, Dfunc_val, G, A)    
+    LU = factor(z, Dfunc_val, G, A)
+
+    if full_output:
+        info = {'z': []}
+        info['z'].append(z)
+        
     while True:
         if show_progress:
             l=z[N+P:N+P+M]
@@ -252,6 +261,8 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
         # LU = factor_kkt_schur(z, Dfunc_val, G, A)
         LU = factor(z, Dfunc_val, G, A)        
         n += 1
+        if full_output:
+            info['z'].append(z)        
         if (mu < tol and dual < tol and prim < tol):
             break
         if n > maxiter:
@@ -263,7 +274,10 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
             print "%i %.6e %.6e %.6e %.6e %.6e %s" %(n+1, mu, dual, prim,
                                                      np.min(l*s), np.max(l*s),
                                                      step_type)
-    return z[0:N]                                          
+    if full_output:
+        return z[0:N], info
+    else:
+        return z[0:N]                                          
 
 
 
@@ -286,7 +300,7 @@ def convert_solution(z, C):
     P[ind]=1.0-rowsums
     return pi, P
 
-def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True):
+def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=False):
     """Number of states"""
     M = C.shape[0]
     
@@ -310,11 +324,20 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True):
     C_scaled = C/c0
 
     """PDIP iteration"""
-    z = primal_dual_solve(F, z0, DF, A, b, G, h,
-                          args=(C_scaled,),
-                          maxiter=maxiter, tol=tol,
-                          show_progress=show_progress)
+    if full_output:
+        z, info = primal_dual_solve(F, z0, DF, A, b, G, h,
+                                         args=(C_scaled,),
+                                         maxiter=maxiter, tol=tol,
+                                         show_progress=show_progress,
+                                         full_output=True)
 
-    pi, P = convert_solution(z, C_scaled)
-
-    return pi, P
+        pi, P = convert_solution(z, C_scaled)
+        return pi, P, info
+    else:
+        z = primal_dual_solve(F, z0, DF, A, b, G, h,
+                              args=(C_scaled,),
+                              maxiter=maxiter, tol=tol,
+                              show_progress=show_progress,
+                              full_output=False)
+        pi, P = convert_solution(z, C_scaled)
+        return pi, P

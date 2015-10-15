@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import solve, lu_factor, lu_solve, cho_factor, cho_solve, eigvalsh
 from scipy.sparse import issparse, diags, csr_matrix
-from scipy.sparse.linalg import splu, SuperLU
+from scipy.sparse.linalg import splu, SuperLU, minres
 
 def mydot(A, B):
     r"""Dot-product that can handle dense and sparse arrays
@@ -41,7 +41,10 @@ def mysolve(LU, b):
 # Solve via full system
 ###############################################################################
 
-def solve_full(z, Fval, DFval, G, A, sigma=0.0):    
+def factor_full(z, DPhival, G, A):
+    return DPhival
+
+def solve_full(z, Fval, DPhival, G, A):    
     M, N=G.shape
     P, N=A.shape
 
@@ -73,18 +76,48 @@ def solve_full(z, Fval, DFval, G, A, sigma=0.0):
     """Sigma matrix"""
     SIG = np.diag(l/s)
 
-    DPhi = DFval[0:N, 0:N]
+    # DPhival = DFval[0:N, 0:N]
 
     """Condensed system"""
     J = np.zeros((N+P, N+P))
-    J[0:N, 0:N] = DPhi + mydot(G.T, mydot(SIG, G))
+    J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))
     J[0:N, N:] = A.T
     J[N:, 0:N] = A
+
+    # Hxx = J[0:N/2,0:N/2]
+    # Hyx = J[0:N/2,N/2:N]
+    # Hyy = J[N/2:N,N/2:N]
+    # CH_xx = cho_factor(Hxx)
+    # S = -(Hyy + mydot(Hyx.T, cho_solve(CH_xx, Hyx)))
+    # evs = eigvalsh(S)
+    # print evs.max(), evs.min()
+    # Ay = A[:, N/2:]
+    # W = np.zeros((N/2+1, N/2+1))
+    # W[0:N/2,0:N/2] = -Hyy
+    # W[0:N/2,N/2:] = -Ay.T
+    # W[N/2:,0:N/2] = -Ay
+    # evs = eigvalsh(W)
+    # print evs.min(), evs.max()
 
     b1 = -rd - mydot(G.T, mydot(SIG, rp2)) + mydot(G.T, rc/s)
     b2 = -rp1
     b = np.hstack((b1, b2))
-    dxnu = solve(J, b)
+
+    sign = np.zeros(N+P)
+    sign[0:N/2] = 1.0
+    sign[N/2:] = -1.0
+    S = diags(sign, 0)
+    J_new = mydot(S, csr_matrix(J))
+    b_new = mydot(S, b)
+
+    dJ_new = np.abs(J_new.diagonal())
+    dPc = np.ones(J_new.shape[0])
+    ind = (dJ_new > 0.0)
+    dPc[ind] = 1.0/dJ_new[ind]
+    Pc = diags(dPc, 0)    
+    dxnu, info = minres(J_new, b_new, tol=1e-8, M=Pc)
+    
+    # dxnu = solve(J, b)
     dx = dxnu[0:N]
     dnu = dxnu[N:]
 
@@ -109,11 +142,20 @@ def factor_aug(z, DPhival, G, A):
     s = z[N+P+M:]
 
     """Sigma matrix"""
-    SIG = diags(l/s, 0)    
+    SIG = diags(l/s, 0)
 
+    # evs = eigvalsh(DPhival)
+    # print evs.max(), evs.min()
+    # print evs
+    # tmp = np.zeros(N)
+    # tmp[N/2:] = 1.0
+    # print np.linalg.norm(np.dot(DPhival, tmp))
+    # print tmp
+    # print np.dot(DPhival, tmp)
+    
     """Condensed system"""
     J = np.zeros((N+P, N+P))
-    J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))
+    J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))    
     # """This is dirty, but would give big speedup => use sparse/block matrices"""
     # J[0:N, 0:N] = DPhival
     # J[np.diag_indices(N/2)] += l/s
