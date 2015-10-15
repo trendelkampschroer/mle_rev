@@ -34,6 +34,7 @@ def F(z, C):
 
     x = z[0:M]
     y = z[M:]
+    q = np.exp(y)
 
     data = Cs.data
     indptr = Cs.indptr
@@ -43,12 +44,15 @@ def F(z, C):
 
     """Loop over rows of Cs"""
     for k in range(M):
-        Fval[k] += 1.0
-        Fval[k+M] += c[k]
+        # Fval[k] += 1.0
+        # Fval[k+M] -= c[k]
 
         # mymax = -np.inf
         # mymin = np.inf 
         
+        nnz_k = indptr[k+1]-indptr[k]
+        tmp_array = np.zeros(nnz_k)
+        ind = 0
         """Loop over nonzero entries in row of Cs"""
         for l in range(indptr[k], indptr[k+1]):
             """Column index of current element"""
@@ -61,9 +65,11 @@ def F(z, C):
             # tmp = -1.0*cs_kj*q[j]/(x[k]*q[j] + x[j]*q[k])
             # print x[j], y[k]-y[j]
             # print x[k], x[j], np.exp(y[k]-y[j])
-            if (x[k] + x[j]*np.exp(y[k]-y[j])) < 1e-14:
-                print x[k], x[j], np.exp(y[k]-y[j])
+            # if (x[k] + x[j]*np.exp(y[k]-y[j])) < 1e-14:
+            #     print x[k], x[j], np.exp(y[k]-y[j])
             tmp = -1.0*cs_kj/(x[k] + x[j]*np.exp(y[k]-y[j]))
+            tmp_array[ind] = tmp
+            ind += 1
             # if tmp>mymax:
             #     mymax = tmp
             # if tmp<mymin:
@@ -72,11 +78,14 @@ def F(z, C):
             """Update Fx"""
             Fval[k] += tmp
             """Update Fy"""
-            Fval[k+M] += tmp*x[j]
+            Fval[k+M] -= tmp*x[j]
         # print "%.6e %.6e" %(mymin, mymax)
-    
-    return Fval
-    
+        print tmp_array
+        
+    Fval[0:M] += 1.0
+    Fval[M:] -= c[:]
+
+    return Fval    
     
 def DF(z, C):
     r"""Jacobian of the monotone mapping.
@@ -152,5 +161,5 @@ def DF(z, C):
     Dyx = scipy.sparse.diags(diag_Dyx, 0)
     DFyx = Hyx + Dyx
     
-    DFval = scipy.sparse.bmat([[Hxx, Hyx], [Hyx.T, Hyy]])
+    DFval = scipy.sparse.bmat([[DFxx, DFyx], [-1.0*DFyx.T, -1.0*DFyy]])
     return DFval.toarray()
