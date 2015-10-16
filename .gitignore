@@ -4,3 +4,5 @@
 *.log
 *.out
 *.egg-info
+mle_rev/objective_sparse.c
+build/*

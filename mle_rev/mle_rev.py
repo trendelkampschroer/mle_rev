@@ -4,15 +4,16 @@ import scipy.sparse
 # from pynewton.fast_safe.fast_safe import primal_dual_solve
 # from objective import F, DF
 # from objective import DF
-from objective import F, DF
+# from objective import F, DF
+from objective_fast import F, DF
 
 __all__ = ['solve_mle_rev',]
 
 from linsolve import mydot
-from linsolve import factor_aug as factor
-from linsolve import solve_factorized_aug as solve_factorized
-# from linsolve import factor_full as factor
-# from linsolve import solve_full as solve_factorized
+# from linsolve import factor_aug as factor
+# from linsolve import solve_factorized_aug as solve_factorized
+from linsolve import factor_full as factor
+from linsolve import solve_full as solve_factorized
 
 """Algorithm parameters"""
 GAMMA_MIN = 0.0001
