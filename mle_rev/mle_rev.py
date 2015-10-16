@@ -4,8 +4,8 @@ import scipy.sparse
 # from pynewton.fast_safe.fast_safe import primal_dual_solve
 # from objective import F, DF
 # from objective import DF
-# from objective import F, DF
-from objective_fast import F, DF
+from objective import F, DF
+# from objective_sparse import F, DF
 
 __all__ = ['solve_mle_rev',]
 
@@ -323,6 +323,7 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
     """Scaling"""
     c0 = C.max()
     C_scaled = C/c0
+    # C_scaled = scipy.sparse.csr_matrix(C_scaled)
 
     """PDIP iteration"""
     if full_output:

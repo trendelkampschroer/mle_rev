@@ -1,11 +1,12 @@
 import numpy as np
 import scipy.sparse
 
+cimport cython
 cimport numpy as np
 
 from libc.math cimport exp
 
-ctypedef np.int_t DTYPE_INT_t
+ctypedef np.int32_t DTYPE_INT_t
 ctypedef np.float_t DTYPE_FLOAT_t
 
 def f(z, C):
@@ -17,7 +18,7 @@ def f(z, C):
     Z=W+W.transpose()
     return -1.0*np.sum(C*np.log(Z))+np.sum(x)+np.sum(C*y[np.newaxis,:])
 
-def F(z, C):
+def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, C):
     r"""Monotone mapping for the reversible MLE problem.
 
     Parameters
@@ -37,7 +38,7 @@ def F(z, C):
     cdef double cs_kj, ekj
     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] x, y
     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, c, Fval
-    # cdef np.ndarray[np.int, ndim=1] indices, indptr
+    cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
     
     M = C.shape[0]
     c = C.sum(axis=0).A1
@@ -70,8 +71,22 @@ def F(z, C):
             Fval[k] += -cs_kj/(x[k]+x[j]*ekj)
             """Update Fy"""
             Fval[k+M] -= -cs_kj*x[j]/(x[k]/ekj + x[j])               
+    return Fval
 
-    return Fval    
+# @cython.boundscheck(False) 
+# cdef void F_inner(size_t M, double[:] data, int[:] indices, int[:] indptr, 
+#                   double[:] c, double[:] x, double[:] y, double[:] Fval) nogil:
+#     cdef size_t k, l, j
+#     cdef double cs_kj, ekj
+#     for k in range(M):
+#         Fval[k] += 1.0
+#         Fval[k+M] -= c[k]
+#         for l in range(indptr[k], indptr[k+1]):
+#             j = indices[l]
+#             cs_kj = data[l]
+#             ekj = exp(y[k]-y[j])
+#             Fval[k] += -cs_kj/(x[k]+x[j]*ekj)
+#             Fval[k+M] -= -cs_kj*x[j]/(x[k]/ekj + x[j])               
     
 def DF(z, C):
     r"""Jacobian of the monotone mapping.
@@ -94,7 +109,7 @@ def DF(z, C):
     cdef np.ndarray[np.float_t, ndim=1] x, y
     cdef np.ndarray[np.float_t, ndim=1] data, data_Hxx, data_Hyy, data_Hyx
     cdef np.ndarray[np.float_t, ndim=1] diag_Dxx, diag_Dyy, diag_Dyx
-    cdef np.ndarray[np.int_t, ndim=1] indices, indptr
+    cdef np.ndarray[np.int32_t, ndim=1] indices, indptr
     
     M = C.shape[0]
     Cs = C + C.T
@@ -129,7 +144,7 @@ def DF(z, C):
             """Current element of Cs at (k, j)"""
             cs_kj = data[l]
 
-            ekj = np.exp(y[k]-y[j])
+            ekj = exp(y[k]-y[j])
 
             tmp1 = cs_kj/((x[k]+x[j]*ekj)*(x[k]/ekj+x[j]))
             tmp2 = cs_kj/(x[k] + x[j]*ekj)**2
@@ -156,5 +171,5 @@ def DF(z, C):
     DFyx = Hyx + Dyx
     
     DFval = scipy.sparse.bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])
-    return DFval.toarray()
+    return DFval
 
