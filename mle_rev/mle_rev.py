@@ -2,9 +2,7 @@ import numpy as np
 import scipy.sparse
 
 # from pynewton.fast_safe.fast_safe import primal_dual_solve
-# from objective import F, DF
-# from objective import DF
-from objective import F, DF
+from objective_dense import F, DF
 # from objective_sparse import F, DF
 
 __all__ = ['solve_mle_rev',]
@@ -322,24 +320,30 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
 
     """Scaling"""
     c0 = C.max()
-    C_scaled = C/c0
-    # C_scaled = scipy.sparse.csr_matrix(C_scaled)
+    C = C/c0
+
+    """Symmetric part"""
+    Cs = C + C.T
+    # Cs = scipy.sparse.csr_matrix(Cs)
+
+    """Column sum"""
+    c = C.sum(axis=0)
 
     """PDIP iteration"""
     if full_output:
         z, info = primal_dual_solve(F, z0, DF, A, b, G, h,
-                                         args=(C_scaled,),
+                                         args=(Cs, c),
                                          maxiter=maxiter, tol=tol,
                                          show_progress=show_progress,
                                          full_output=True)
 
-        pi, P = convert_solution(z, C_scaled)
+        pi, P = convert_solution(z, C)
         return pi, P, info
     else:
         z = primal_dual_solve(F, z0, DF, A, b, G, h,
-                              args=(C_scaled,),
+                              args=(Cs, c),
                               maxiter=maxiter, tol=tol,
                               show_progress=show_progress,
                               full_output=False)
-        pi, P = convert_solution(z, C_scaled)
+        pi, P = convert_solution(z, C)
         return pi, P

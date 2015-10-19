@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.linalg import solve, lu_factor, lu_solve, cho_factor, cho_solve, eigvalsh
-from scipy.sparse import issparse, diags, csr_matrix
+from scipy.sparse import issparse, diags, csr_matrix, bmat
 from scipy.sparse.linalg import splu, SuperLU, minres
 
 def mydot(A, B):
@@ -76,33 +76,31 @@ def solve_full(z, Fval, DPhival, G, A):
     """Sigma matrix"""
     SIG = np.diag(l/s)
 
-    # DPhival = DFval[0:N, 0:N]
-
     """Condensed system"""
-    J = np.zeros((N+P, N+P))
-    J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))
-    J[0:N, N:] = A.T
-    J[N:, 0:N] = A
+    if issparse(DPhival):
+        if not issparse(A):
+            A = csr_matrix(A)        
+        H = DPhival + mydot(G.T, mydot(SIG, G))
+        J = bmat([[H, A.T], [A, None]])
+    else:
+        if issparse(A):
+            A = A.toarray()
+        J = np.zeros((N+P, N+P))
+        J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))            
+        J[0:N, N:] = A.T
+        J[N:, 0:N] = A
 
-    # Hxx = J[0:N/2,0:N/2]
-    # Hyx = J[0:N/2,N/2:N]
-    # Hyy = J[N/2:N,N/2:N]
-    # CH_xx = cho_factor(Hxx)
-    # S = -(Hyy + mydot(Hyx.T, cho_solve(CH_xx, Hyx)))
-    # evs = eigvalsh(S)
-    # print evs.max(), evs.min()
-    # Ay = A[:, N/2:]
-    # W = np.zeros((N/2+1, N/2+1))
-    # W[0:N/2,0:N/2] = -Hyy
-    # W[0:N/2,N/2:] = -Ay.T
-    # W[N/2:,0:N/2] = -Ay
-    # evs = eigvalsh(W)
-    # print evs.min(), evs.max()
+    # """Condensed system"""
+    # J = np.zeros((N+P, N+P))
+    # J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))
+    # J[0:N, N:] = A.T
+    # J[N:, 0:N] = A
 
     b1 = -rd - mydot(G.T, mydot(SIG, rp2)) + mydot(G.T, rc/s)
     b2 = -rp1
     b = np.hstack((b1, b2))
 
+    """Prepare iterative solve via MINRES"""
     sign = np.zeros(N+P)
     sign[0:N/2] = 1.0
     sign[N/2:] = -1.0
@@ -132,7 +130,7 @@ def solve_full(z, Fval, DPhival, G, A):
 # Solve via augmented system
 ###############################################################################
 
-def factor_aug(z, DPhival, G, A):
+def factor_aug(z, DPhival, G, A):    
     M, N = G.shape
     P, N = A.shape
     """Multiplier for inequality constraints"""
@@ -144,23 +142,19 @@ def factor_aug(z, DPhival, G, A):
     """Sigma matrix"""
     SIG = diags(l/s, 0)
 
-    # evs = eigvalsh(DPhival)
-    # print evs.max(), evs.min()
-    # print evs
-    # tmp = np.zeros(N)
-    # tmp[N/2:] = 1.0
-    # print np.linalg.norm(np.dot(DPhival, tmp))
-    # print tmp
-    # print np.dot(DPhival, tmp)
-    
     """Condensed system"""
-    J = np.zeros((N+P, N+P))
-    J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))    
-    # """This is dirty, but would give big speedup => use sparse/block matrices"""
-    # J[0:N, 0:N] = DPhival
-    # J[np.diag_indices(N/2)] += l/s
-    J[0:N, N:] = A.T
-    J[N:, 0:N] = A
+    if issparse(DPhival):
+        if not issparse(A):
+            A = csr_matrix(A)        
+        H = DPhival + mydot(G.T, mydot(SIG, G))
+        J = bmat([[H, A.T], [A, None]])
+    else:
+        if issparse(A):
+            A = A.toarray()
+        J = np.zeros((N+P, N+P))
+        J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))            
+        J[0:N, N:] = A.T
+        J[N:, 0:N] = A
 
     LU = myfactor(J)    
     return LU
