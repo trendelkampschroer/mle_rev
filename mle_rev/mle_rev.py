@@ -2,7 +2,10 @@ import numpy as np
 import scipy.sparse
 
 # from objective_dense import F, DF
-from objective_sparse import F, DF
+# from objective_sparse import F, DF
+
+import objective_sparse
+import objective_dense
 
 __all__ = ['solve_mle_rev',]
 
@@ -277,24 +280,26 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
     else:
         return z[0:N]                                          
 
-def convert_solution(z, C):
-    N=z.shape[0]
-    x=z[0:N/2]
-    y=z[N/2:]
+# def convert_solution(z, C):
+#     if scipy.sparse.issparse(C):
+#         C = C.toarray()
+#     N=z.shape[0]
+#     x=z[0:N/2]
+#     y=z[N/2:]
 
-    w=np.exp(y)
-    pi=w/w.sum()
+#     w=np.exp(y)
+#     pi=w/w.sum()
     
-    X=pi[:,np.newaxis]*x[np.newaxis,:]
-    Y=X+np.transpose(X)
-    denom=Y
-    enum=(C+np.transpose(C))*np.transpose(pi)
-    P=enum/denom
-    ind=np.diag_indices(C.shape[0])
-    P[ind]=0.0
-    rowsums=P.sum(axis=1)
-    P[ind]=1.0-rowsums
-    return pi, P
+#     X=pi[:,np.newaxis]*x[np.newaxis,:]
+#     Y=X+np.transpose(X)
+#     denom=Y
+#     enum=(C+np.transpose(C))*np.transpose(pi)
+#     P=enum/denom
+#     ind=np.diag_indices(C.shape[0])
+#     P[ind]=0.0
+#     rowsums=P.sum(axis=1)
+#     P[ind]=1.0-rowsums
+#     return pi, P
 
 def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=False):
     """Number of states"""
@@ -321,20 +326,33 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
 
     """Symmetric part"""
     Cs = C + C.T
-    # Cs = scipy.sparse.csr_matrix(Cs)
 
     """Column sum"""
     c = C.sum(axis=0)
 
+    convert_solution = objective_dense.convert_solution        
+
+    if scipy.sparse.issparse(C):
+        Cs = Cs.tocsr()
+        c = c.A1
+        A = scipy.sparse.csr_matrix(A)
+        F = objective_sparse.F
+        DF = objective_sparse.DF
+        # convert_solution = objective_sparse.convert_solution
+    else:
+        F = objective_dense.F
+        DF = objective_dense.DF
+        # convert_solution = objective_dense.convert_solution        
+
     """PDIP iteration"""
     if full_output:
         z, info = primal_dual_solve(F, z0, DF, A, b, G, h,
-                                         args=(scipy.sparse.csr_matrix(Cs), c),
+                                         args=(Cs, c),
                                          maxiter=maxiter, tol=tol,
                                          show_progress=show_progress,
                                          full_output=True)
 
-        pi, P = convert_solution(z, C)
+        pi, P = convert_solution(z, Cs)
         return pi, P, info
     else:
         z = primal_dual_solve(F, z0, DF, A, b, G, h,
@@ -342,5 +360,5 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
                               maxiter=maxiter, tol=tol,
                               show_progress=show_progress,
                               full_output=False)
-        pi, P = convert_solution(z, C)
+        pi, P = convert_solution(z, Cs)
         return pi, P

@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.sparse
+from scipy.sparse import csr_matrix, diags, bmat
 from scipy.sparse.construct import _compressed_sparse_stack
 
 cimport cython
@@ -10,52 +10,59 @@ from libc.math cimport exp
 ctypedef np.int32_t DTYPE_INT_t
 ctypedef np.float_t DTYPE_FLOAT_t
 
-def convert_solution(z, Cs):
-    cdef size_t M, k, l, j
-    cdef double cs_kj, ekj
-    cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] x, y
-    cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
-    cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, data_P, diag_P
+# This is buggy, TODO: find bug
+# def convert_solution(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs):
+#     cdef size_t M, k, l, j
+#     cdef double cs_kj, ekj
+#     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] x, y
+#     cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
+#     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, data_P, diag_P, pi
 
-    if not isinstance(Cs, scipy.sparse.csr_matrix):
-        """Convert to csr_matrix"""
-        Cs = scipy.sparse.csr_matrix(Cs)
+#     if not isinstance(Cs, csr_matrix):
+#         """Convert to csr_matrix"""
+#         Cs = csr_matrix(Cs)
 
-    M = Cs.shape[0]
-    x = z[0:M]
-    y = z[M:]
+#     M = Cs.shape[0]
+#     x = z[0:M]
+#     y = z[M:]    
 
-    data = Cs.data
-    indptr = Cs.indptr
-    indices = Cs.indices
+#     data = Cs.data
+#     indptr = Cs.indptr
+#     indices = Cs.indices
 
-    """Loop over rows of Cs"""
-    for k in range(M):
+#     data_P = np.zeros_like(data)
+#     diag_P = np.zeros(M)
+#     pi = np.zeros(M)
 
-        """Loop over nonzero entries in row of Cs"""
-        for l in range(indptr[k], indptr[k+1]):
-            """Column index of current element"""
-            j = indices[l]
-            if k != j:
-                """Current element of Cs at (k, j)"""
-                cs_kj = data[l]
-                """Exponential of difference"""
-                ekj = exp(y[k]-y[j])
-                """Compute off diagonal element"""
-                data_P = cs_kj/(x[k] + x[j]/ekj)
+#     """Loop over rows of Cs"""
+#     for k in range(M):
+#         pi[k] = exp(y[k])
+#         """Loop over nonzero entries in row of Cs"""
+#         for l in range(indptr[k], indptr[k+1]):
+#             """Column index of current element"""
+#             j = indices[l]
+#             if k != j:
+#                 """Current element of Cs at (k, j)"""
+#                 cs_kj = data[l]
+#                 """Exponential of difference"""
+#                 ekj = exp(y[k]-y[j])
+#                 """Compute off diagonal element"""
+#                 data_P[l] = cs_kj/(x[k] + x[j]/ekj)
+#                 """Update diagonal element"""
+#                 diag_P[k] -= data_P[l]
+#         diag_P[k] += 1.0
 
-    
-    
+#     P = csr_matrix((data_P, indices, indptr), shape=(M, M)) + diags(diag_P, 0)
+#     return pi/pi.sum(), P    
 
-def f(z, C):
-    N=z.shape[0]
-    x=z[0:N/2]
-    y=z[N/2:]
-    q=np.exp(y)    
-    W=x[:,np.newaxis]*q[np.newaxis,:]
-    Z=W+W.transpose()
-    return -1.0*np.sum(C*np.log(Z))+np.sum(x)+np.sum(C*y[np.newaxis,:])
-
+# def f(z, C):
+#     N=z.shape[0]
+#     x=z[0:N/2]
+#     y=z[N/2:]
+#     q=np.exp(y)    
+#     W=x[:,np.newaxis]*q[np.newaxis,:]
+#     Z=W+W.transpose()
+#     return -1.0*np.sum(C*np.log(Z))+np.sum(x)+np.sum(C*y[np.newaxis,:])
 
 def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
     r"""Monotone mapping for the reversible MLE problem.
@@ -79,9 +86,9 @@ def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1]
     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, Fval
     cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
 
-    if not isinstance(Cs, scipy.sparse.csr_matrix):
+    if not isinstance(Cs, csr_matrix):
         """Convert to csr_matrix"""
-        Cs = scipy.sparse.csr_matrix(Cs)    
+        Cs = csr_matrix(Cs)    
 
     M = Cs.shape[0]
 
@@ -136,9 +143,9 @@ def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1
     cdef np.ndarray[np.float_t, ndim=1] diag_Dxx, diag_Dyy, diag_Dyx
     cdef np.ndarray[np.int32_t, ndim=1] indices, indptr
 
-    if not isinstance(Cs, scipy.sparse.csr_matrix):
+    if not isinstance(Cs, csr_matrix):
         """Convert to csr_matrix"""
-        Cs = scipy.sparse.csr_matrix(Cs)    
+        Cs = csr_matrix(Cs)    
 
     M = Cs.shape[0]
 
@@ -185,20 +192,20 @@ def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1
             data_Hyx[l] = -tmp1*x[k]
             diag_Dyx[k] += tmp1*x[j]
 
-    Hxx = scipy.sparse.csr_matrix((data_Hxx, indices, indptr), shape=(M, M))
-    Dxx = scipy.sparse.diags(diag_Dxx, 0)
+    Hxx = csr_matrix((data_Hxx, indices, indptr), shape=(M, M))
+    Dxx = diags(diag_Dxx, 0)
     DFxx = Hxx + Dxx
 
-    Hyy = scipy.sparse.csr_matrix((data_Hyy, indices, indptr), shape=(M, M))
-    Dyy = scipy.sparse.diags(diag_Dyy, 0)
+    Hyy = csr_matrix((data_Hyy, indices, indptr), shape=(M, M))
+    Dyy = diags(diag_Dyy, 0)
     DFyy = Hyy + Dyy
 
-    Hyx = scipy.sparse.csr_matrix((data_Hyx, indices, indptr), shape=(M, M))
-    Dyx = scipy.sparse.diags(diag_Dyx, 0)
+    Hyx = csr_matrix((data_Hyx, indices, indptr), shape=(M, M))
+    Dyx = diags(diag_Dyx, 0)
     DFyx = Hyx + Dyx
 
     """The call to bmat is really expensive, but I don't know how to avoid it"""
-    DFval = scipy.sparse.bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])    
+    DFval = bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])    
     return DFval
 
 # def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, C):
@@ -341,17 +348,17 @@ def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1
 #             data_Hyx[l] = -tmp1*x[k]
 #             diag_Dyx[k] += tmp1*x[j]
 
-#     Hxx = scipy.sparse.csr_matrix((data_Hxx, indices, indptr), shape=(M, M))
-#     Dxx = scipy.sparse.diags(diag_Dxx, 0)
+#     Hxx = csr_matrix((data_Hxx, indices, indptr), shape=(M, M))
+#     Dxx = diags(diag_Dxx, 0)
 #     DFxx = Hxx + Dxx
 
-#     Hyy = scipy.sparse.csr_matrix((data_Hyy, indices, indptr), shape=(M, M))
-#     Dyy = scipy.sparse.diags(diag_Dyy, 0)
+#     Hyy = csr_matrix((data_Hyy, indices, indptr), shape=(M, M))
+#     Dyy = diags(diag_Dyy, 0)
 #     DFyy = Hyy + Dyy
 
-#     Hyx = scipy.sparse.csr_matrix((data_Hyx, indices, indptr), shape=(M, M))
-#     Dyx = scipy.sparse.diags(diag_Dyx, 0)
+#     Hyx = csr_matrix((data_Hyx, indices, indptr), shape=(M, M))
+#     Dyx = diags(diag_Dyx, 0)
 #     DFyx = Hyx + Dyx
     
-#     DFval = scipy.sparse.bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])
+#     DFval = bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])
 #     return DFval

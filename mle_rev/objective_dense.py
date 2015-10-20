@@ -1,4 +1,26 @@
 import numpy as np
+from scipy.sparse import issparse
+
+def convert_solution(z, Cs):
+    if issparse(Cs):
+        Cs = Cs.toarray()
+    M = Cs.shape[0]
+    x = z[0:M]
+    y = z[M:]
+
+    w=np.exp(y)
+    pi=w/w.sum()
+    
+    X=pi[:,np.newaxis]*x[np.newaxis,:]
+    Y=X+np.transpose(X)
+    denom=Y
+    enum=Cs*np.transpose(pi)
+    P=enum/denom
+    ind=np.diag_indices(Cs.shape[0])
+    P[ind]=0.0
+    rowsums=P.sum(axis=1)
+    P[ind]=1.0-rowsums
+    return pi, P
 
 ###############################################################################
 # Objective, Gradient, and Hessian
