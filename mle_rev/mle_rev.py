@@ -1,9 +1,8 @@
 import numpy as np
 import scipy.sparse
 
-# from pynewton.fast_safe.fast_safe import primal_dual_solve
-from objective_dense import F, DF
-# from objective_sparse import F, DF
+# from objective_dense import F, DF
+from objective_sparse import F, DF
 
 __all__ = ['solve_mle_rev',]
 
@@ -278,8 +277,6 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
     else:
         return z[0:N]                                          
 
-
-
 def convert_solution(z, C):
     N=z.shape[0]
     x=z[0:N/2]
@@ -315,7 +312,7 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
 
     """Equality constraints"""
     A = np.zeros((1, 2*M))
-    A[0, M] = 1.0
+    A[0, M] = 1.0    
     b = np.array([0.0])
 
     """Scaling"""
@@ -332,7 +329,7 @@ def solve_mle_rev(C, tol=1e-10, maxiter=100, show_progress=True, full_output=Fal
     """PDIP iteration"""
     if full_output:
         z, info = primal_dual_solve(F, z0, DF, A, b, G, h,
-                                         args=(Cs, c),
+                                         args=(scipy.sparse.csr_matrix(Cs), c),
                                          maxiter=maxiter, tol=tol,
                                          show_progress=show_progress,
                                          full_output=True)
