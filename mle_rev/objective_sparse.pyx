@@ -10,59 +10,49 @@ from libc.math cimport exp
 ctypedef np.int32_t DTYPE_INT_t
 ctypedef np.float_t DTYPE_FLOAT_t
 
-# This is buggy, TODO: find bug
-# def convert_solution(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs):
-#     cdef size_t M, k, l, j
-#     cdef double cs_kj, ekj
-#     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] x, y
-#     cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
-#     cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, data_P, diag_P, pi
+def convert_solution(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs):
+    cdef size_t M, k, l, j
+    cdef double cs_kj, ekj
+    cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] x, y
+    cdef np.ndarray[DTYPE_INT_t, ndim=1] indices, indptr
+    cdef np.ndarray[DTYPE_FLOAT_t, ndim=1] data, data_P, diag_P, nu
 
-#     if not isinstance(Cs, csr_matrix):
-#         """Convert to csr_matrix"""
-#         Cs = csr_matrix(Cs)
+    if not isinstance(Cs, csr_matrix):
+        """Convert to csr_matrix"""
+        Cs = csr_matrix(Cs)
 
-#     M = Cs.shape[0]
-#     x = z[0:M]
-#     y = z[M:]    
+    M = Cs.shape[0]
+    x = z[0:M]
+    y = z[M:]    
 
-#     data = Cs.data
-#     indptr = Cs.indptr
-#     indices = Cs.indices
+    data = Cs.data
+    indptr = Cs.indptr
+    indices = Cs.indices
 
-#     data_P = np.zeros_like(data)
-#     diag_P = np.zeros(M)
-#     pi = np.zeros(M)
+    data_P = np.zeros_like(data)
+    diag_P = np.zeros(M)
+    nu = np.zeros(M)
 
-#     """Loop over rows of Cs"""
-#     for k in range(M):
-#         pi[k] = exp(y[k])
-#         """Loop over nonzero entries in row of Cs"""
-#         for l in range(indptr[k], indptr[k+1]):
-#             """Column index of current element"""
-#             j = indices[l]
-#             if k != j:
-#                 """Current element of Cs at (k, j)"""
-#                 cs_kj = data[l]
-#                 """Exponential of difference"""
-#                 ekj = exp(y[k]-y[j])
-#                 """Compute off diagonal element"""
-#                 data_P[l] = cs_kj/(x[k] + x[j]/ekj)
-#                 """Update diagonal element"""
-#                 diag_P[k] -= data_P[l]
-#         diag_P[k] += 1.0
+    """Loop over rows of Cs"""
+    for k in range(M):
+        nu[k] = exp(y[k])
+        """Loop over nonzero entries in row of Cs"""
+        for l in range(indptr[k], indptr[k+1]):
+            """Column index of current element"""
+            j = indices[l]
+            if k != j:
+                """Current element of Cs at (k, j)"""
+                cs_kj = data[l]
+                """Exponential of difference"""
+                ekj = exp(y[k]-y[j])
+                """Compute off diagonal element"""
+                data_P[l] = cs_kj/(x[k] + x[j]*ekj)
+                """Update diagonal element"""
+                diag_P[k] -= data_P[l]
+        diag_P[k] += 1.0
 
-#     P = csr_matrix((data_P, indices, indptr), shape=(M, M)) + diags(diag_P, 0)
-#     return pi/pi.sum(), P    
-
-# def f(z, C):
-#     N=z.shape[0]
-#     x=z[0:N/2]
-#     y=z[N/2:]
-#     q=np.exp(y)    
-#     W=x[:,np.newaxis]*q[np.newaxis,:]
-#     Z=W+W.transpose()
-#     return -1.0*np.sum(C*np.log(Z))+np.sum(x)+np.sum(C*y[np.newaxis,:])
+    P = csr_matrix((data_P, indices, indptr), shape=(M, M)) + diags(diag_P, 0)
+    return nu/nu.sum(), P    
 
 def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
     r"""Monotone mapping for the reversible MLE problem.
