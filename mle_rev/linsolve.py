@@ -90,12 +90,6 @@ def solve_full(z, Fval, DPhival, G, A):
         J[0:N, N:] = A.T
         J[N:, 0:N] = A
 
-    # """Condensed system"""
-    # J = np.zeros((N+P, N+P))
-    # J[0:N, 0:N] = DPhival + mydot(G.T, mydot(SIG, G))
-    # J[0:N, N:] = A.T
-    # J[N:, 0:N] = A
-
     b1 = -rd - mydot(G.T, mydot(SIG, rp2)) + mydot(G.T, rc/s)
     b2 = -rp1
     b = np.hstack((b1, b2))
