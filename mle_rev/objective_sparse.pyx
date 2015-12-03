@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix, diags, bmat
 from scipy.sparse.construct import _compressed_sparse_stack
+from scipy.sparse.linalg import LinearOperator
 
 cimport cython
 cimport numpy as np
@@ -110,7 +111,7 @@ def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1]
             Fval[k+M] -= -cs_kj*x[j]/(x[k]/ekj + x[j])               
     return Fval
 
-def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
+def _DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
     r"""Jacobian of the monotone mapping.
 
     Parameters
@@ -194,9 +195,113 @@ def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1
     Dyx = diags(diag_Dyx, 0)
     DFyx = Hyx + Dyx
 
-    """The call to bmat is really expensive, but I don't know how to avoid it"""
-    DFval = bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]])    
+    return DFxx, DFyx, DFyy
+
+def DF(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
+    r"""Jacobian of the monotone mapping.
+
+    Parameters
+    ----------
+    z : (2*M,) ndarray
+        Point at which to evaluate mapping, z=(x, y)
+    C : (M, M) scipy.sparse matrix
+        Count matrix of reversible chain
+
+    Returns
+    -------
+    DFval : (2*M, 2*M) scipy.sparse matrix
+        Value of the Jacobian at z
+    
+    """
+    DFxx, DFyx, DFyy = _DF(z, Cs, c)
+    """The call to bmat is really expensive, but I don't know how to avoid it
+    if a sparse matrix is desired"""
+    DFval = bmat([[DFxx, DFyx.T], [-1.0*DFyx, -1.0*DFyy]]).tocsr()    
     return DFval
+
+def DFsym(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, Cs, np.ndarray[DTYPE_FLOAT_t, ndim=1] c):
+    r"""Jacobian of the monotone mapping. Symmetric version.
+
+    Parameters
+    ----------
+    z : (2*M,) ndarray
+        Point at which to evaluate mapping, z=(x, y)
+    C : (M, M) scipy.sparse matrix
+        Count matrix of reversible chain
+
+    Returns
+    -------
+    DFval : (2*M, 2*M) scipy.sparse matrix
+        Value of the Jacobian at z
+    
+    """
+    DFxx, DFyx, DFyy = _DF(z, Cs, c)
+    return JacobianOperatorSymmetric(DFxx, DFyx, DFyy)    
+
+class JacobianOperator(LinearOperator):
+    r"""Realise the following block sparse matrix.
+           A   B.T
+    M = (          )
+          -B   -C     
+    """
+    
+    def __init__(self, A, B, C):
+        self.N1 = A.shape[0]
+        self.N2 = C.shape[0]
+        N = self.N1+self.N2
+        self.shape = (N, N)
+        self.dtype = A.dtype
+        
+        self.A = A
+        self.B = B
+        self.BT = B.T.tocsr()
+        self.C = C
+        self.diag = np.hstack((A.diagonal(), -1.0*C.diagonal()))
+
+    def _matvec(self, x):
+        N1 = self.N1
+        N2 = self.N2
+        y = np.zeros(N1+N2)
+        y[0:N1] = self.A.dot(x[0:N1])  + self.BT.dot(x[N1:])
+        y[N1:] = -self.B.dot(x[0:N1]) - self.C.dot(x[N1:])
+        return y
+
+    def diagonal(self):
+        return self.diag
+
+class JacobianOperatorSymmetric(LinearOperator):
+    r"""Realise the following symmetric block sparse matrix.
+
+           A   B.T
+    M = (          )
+           B   C     
+
+    with symmetric sub blocks A=A.T, C=C.T
+    
+    """
+    def __init__(self, A, B, C):
+        self.N1 = A.shape[0]
+        self.N2 = C.shape[0]
+        N = self.N1+self.N2
+        self.shape = (N, N)
+        self.dtype = A.dtype
+        
+        self.A = A
+        self.B = B
+        self.BT = B.T.tocsr()
+        self.C = C
+        self.diag = np.hstack((A.diagonal(), C.diagonal()))
+
+    def _matvec(self, x):
+        N1 = self.N1
+        N2 = self.N2
+        y = np.zeros(N1+N2)
+        y[0:N1] = self.A.dot(x[0:N1])  + self.BT.dot(x[N1:])
+        y[N1:] = self.B.dot(x[0:N1]) + self.C.dot(x[N1:])
+        return y
+
+    def diagonal(self):
+        return self.diag
 
 # def F(np.ndarray[DTYPE_FLOAT_t, ndim=1] z, C):
 #     r"""Monotone mapping for the reversible MLE problem.

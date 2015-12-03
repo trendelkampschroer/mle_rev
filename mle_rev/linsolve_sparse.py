@@ -3,22 +3,27 @@ from scipy.sparse import issparse, csr_matrix, diags
 from scipy.sparse.linalg import minres, aslinearoperator, LinearOperator
 
 class AugmentedSystem(LinearOperator):
-    def __init__(self, H, A):
-        self.H2 = H
+
+    def __init__(self, J, G, SIG, A):        
+        self.N1 = J.shape[0]
+        self.N2 = A.shape[0]
+        N = self.N1 + self.N2
+        self.shape = (N, N)
+        self.dtype = J.dtype
+
+        self.E = ((G.T.dot(SIG)).dot(G)).tocsr()
+        self.J = J
         self.A = A
         self.AT = A.T.tocsr()
-        self.M1, self.N1 = self.H2.shape
-        self.M2, self.N2 = self.A.shape
-        self.shape = (self.M1 + self.M2, self.N1 + self.M2)
-        self.dtype = self.H2.dtype
-        self.diag = np.hstack((self.H2.diagonal(), 0))
-
-    def _matvec(self, v):        
-        v1 = v[0:self.N1]
-        v2 = v[self.N1:]
-        y = np.zeros(self.shape[0])
-        y[0:self.N1] = self.H2.dot(v1) + self.AT.dot(v2)
-        y[self.N1:] = self.A.dot(v1)
+        self.diag = np.hstack((J.diagonal() + self.E.diagonal(),
+                               np.zeros(self.N2)))                        
+        
+    def _matvec(self, x):
+        N1 = self.N1
+        N2 = self.N2
+        y = np.zeros(N1+N2)
+        y[0:N1] = self.J.dot(x[0:N1]) + self.E.dot(x[0:N1]) + self.AT.dot(x[N1:])
+        y[N1:] = self.A.dot(x[0:N1])
         return y
 
     def diagonal(self):
@@ -85,14 +90,16 @@ def factor_aug(z, DPhival, G, A):
     if not issparse(G):
         G = csr_matrix(G)
 
-    # """Ensure linear operator"""
-    # DPhival = aslinearoperator(DPhival)
+    """Since we expect symmetric DPhival, we need to change A"""
+    sign = np.zeros(N)
+    sign[0:N/2] = 1.0
+    sign[N/2:] = -1.0
+    S = diags(sign, 0)
 
-    """Set up H"""
-    H = DPhival + G.T.dot(SIG).dot(G)
-
-    J = AugmentedSystem(H, A)
-    return J
+    A_new = A.dot(S)
+    
+    W = AugmentedSystem(DPhival, G, SIG, A_new)
+    return W
 
 def solve_factorized_aug(z, Fval, LU, G, A):
     M, N=G.shape
@@ -126,8 +133,8 @@ def solve_factorized_aug(z, Fval, LU, G, A):
     """Sigma matrix"""
     SIG = np.diag(l/s)
 
-    """LU is actually the augmented system J"""
-    J = LU
+    """LU is actually the augmented system W"""
+    W = LU
 
     b1 = -rd - mydot(G.T, mydot(SIG, rp2)) + mydot(G.T, rc/s)
     b2 = -rp1
@@ -137,24 +144,17 @@ def solve_factorized_aug(z, Fval, LU, G, A):
     sign = np.zeros(N+P)
     sign[0:N/2] = 1.0
     sign[N/2:] = -1.0
-    S = diags(sign, 0)
-    # J_new = mydot(S, csr_matrix(J))
-    def mv(v):
-        x = J.dot(v)
-        return S.dot(x)
-        
-    # J_new = LinearOperator(J.shape, matvec=mv)
-    J_new = aslinearoperator(S).dot(J)
-    
+    S = diags(sign, 0)        
+   
+    """Change rhs"""
     b_new = mydot(S, b)
 
-    dJ_new = S.dot(J.diagonal())
-    # dJ_new = np.abs(J_new.diagonal())
-    dPc = np.ones(J_new.shape[0])
-    ind = (dJ_new > 0.0)
-    dPc[ind] = 1.0/dJ_new[ind]
+    dW = np.abs(W.diagonal())
+    dPc = np.ones(W.shape[0])
+    ind = (dW > 0.0)
+    dPc[ind] = 1.0/dW[ind]
     Pc = diags(dPc, 0)    
-    dxnu, info = minres(J_new, b_new, tol=1e-8, M=Pc)
+    dxnu, info = minres(W, b_new, tol=1e-8, M=Pc)
     
     # dxnu = solve(J, b)
     dx = dxnu[0:N]
