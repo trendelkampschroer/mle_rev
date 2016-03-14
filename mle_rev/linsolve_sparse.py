@@ -1,3 +1,22 @@
+# -*- coding: utf-8 -*-
+
+# This file is part of mle_rev.
+
+# Copyright (c) 2016 Benjamin Trendelkamp-Schroer
+
+# mle_rev is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# mle_rev is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with mle_rev.  If not, see <http://www.gnu.org/licenses/>.
+
 import numpy as np
 from scipy.sparse import issparse, csr_matrix, diags
 from scipy.sparse.linalg import minres, aslinearoperator, LinearOperator
@@ -81,6 +100,7 @@ def factor_aug(z, DPhival, G, A):
 
     """Sigma matrix"""
     SIG = diags(l/s, 0)
+    # SIG = diags(l*s, 0)
 
     """Convert A"""
     if not issparse(A):
@@ -94,9 +114,9 @@ def factor_aug(z, DPhival, G, A):
     sign = np.zeros(N)
     sign[0:N/2] = 1.0
     sign[N/2:] = -1.0
-    S = diags(sign, 0)
+    T = diags(sign, 0)
 
-    A_new = A.dot(S)
+    A_new = A.dot(T)
     
     W = AugmentedSystem(DPhival, G, SIG, A_new)
     return W
@@ -131,7 +151,7 @@ def solve_factorized_aug(z, Fval, LU, G, A):
     rc = Fval[N+P+M:]
 
     """Sigma matrix"""
-    SIG = np.diag(l/s)
+    SIG = diags(l/s, 0)
 
     """LU is actually the augmented system W"""
     W = LU
@@ -144,17 +164,17 @@ def solve_factorized_aug(z, Fval, LU, G, A):
     sign = np.zeros(N+P)
     sign[0:N/2] = 1.0
     sign[N/2:] = -1.0
-    S = diags(sign, 0)        
+    T = diags(sign, 0)        
    
     """Change rhs"""
-    b_new = mydot(S, b)
+    b_new = mydot(T, b)
 
     dW = np.abs(W.diagonal())
     dPc = np.ones(W.shape[0])
     ind = (dW > 0.0)
     dPc[ind] = 1.0/dW[ind]
     Pc = diags(dPc, 0)    
-    dxnu, info = minres(W, b_new, tol=1e-8, M=Pc)
+    dxnu, info = minres(W, b_new, tol=1e-10, M=Pc)
     
     # dxnu = solve(J, b)
     dx = dxnu[0:N]
@@ -162,6 +182,8 @@ def solve_factorized_aug(z, Fval, LU, G, A):
 
     """Obtain search directions for l and s"""
     ds = -rp2 - mydot(G, dx)
+    # ds = s*ds
+    # SIG = np.diag(l/s)
     dl = -mydot(SIG, ds) - rc/s
 
     dz = np.hstack((dx, dnu, dl, ds))

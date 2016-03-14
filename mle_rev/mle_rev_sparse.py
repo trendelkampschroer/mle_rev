@@ -1,3 +1,22 @@
+# -*- coding: utf-8 -*-
+
+# This file is part of mle_rev.
+
+# Copyright (c) 2016 Benjamin Trendelkamp-Schroer
+
+# mle_rev is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# mle_rev is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with mle_rev.  If not, see <http://www.gnu.org/licenses/>.
+
 import numpy as np
 import scipy.sparse
 
@@ -20,6 +39,9 @@ TAU = 0.5
 RHO = min(0.2, min((0.5*GAMMA_BAR)**(1.0/TAU), 1.0-KAPPA))
 SIGMA = 0.1
 BETA = 100000
+
+def mynorm(x):
+    return np.linalg.norm(x)
 
 def wrap_function(function, args):
     ncalls = [0]
@@ -108,8 +130,8 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
         while True:
             z_new = z + alpha*dz
             KKTval_new = KKT(z_new)
-            dual = np.linalg.norm(KKTval_new[0:N])
-            prim = np.linalg.norm(KKTval_new[N:N+P+M])        
+            dual = mynorm(KKTval_new[0:N])
+            prim = mynorm(KKTval_new[N:N+P+M])        
             mu_new = gap(z_new)
             cent_new = centrality(z_new)
 
@@ -145,8 +167,8 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
         while True:
             z_new = z+alpha*dz
             KKTval_new = KKT(z_new, sigma=SIGMA)
-            dual = np.linalg.norm(KKTval_new[0:N])
-            prim = np.linalg.norm(KKTval_new[N:N+P+M])
+            dual = mynorm(KKTval_new[0:N])
+            prim = mynorm(KKTval_new[N:N+P+M])
             mu_new = gap(z_new)
             cent_new = centrality(z_new)
 
@@ -177,8 +199,8 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
     """Initial KKT-values"""
     KKTval0 = KKT(z0, sigma=0.0)
     mu0 = gap(z0)
-    dual0 = np.linalg.norm(KKTval0[0:N])
-    prim0 = np.linalg.norm(KKTval0[N:N+P+M])
+    dual0 = mynorm(KKTval0[0:N])
+    prim0 = mynorm(KKTval0[N:N+P+M])
 
     """Initial neighborhood"""
     beta = BETA * np.sqrt(dual0**2 + prim0**2)/mu0
@@ -248,8 +270,8 @@ def primal_dual_solve(func, x0, Dfunc, A, b, G, h, args=(), tol=1e-10,
 
         """Compute new iterates"""
         KKTval = KKT(z, sigma=0.0)
-        dual = np.linalg.norm(KKTval[0:N])
-        prim = np.linalg.norm(KKTval[N:N+P+M])
+        dual = mynorm(KKTval[0:N])
+        prim = mynorm(KKTval[N:N+P+M])
         x = z[0:N]
         Dfunc_val = Dfunc(x)
         LU = factor(z, Dfunc_val, G, A)        
